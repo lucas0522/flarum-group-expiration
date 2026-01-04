@@ -4,17 +4,12 @@ use Flarum\Extend;
 use Flarum\Api\Serializer\UserSerializer;
 use HertzDev\GroupExpiration\Api\Controller\SaveExpirationController;
 use HertzDev\GroupExpiration\Console\ExpireGroupsCommand;
-use Flarum\User\Event\Saving; // 👈 1. 引入正确的 Saving 事件
+use Flarum\User\Event\Saving; // 👈 1. 引入 Saving
 use HertzDev\GroupExpiration\Listeners\ClearExpiration;
-// 注意：删掉了 use Flarum\Group\Event\Detaching;
 
 return [
-    (new Extend\Frontend('forum'))
-        ->js(__DIR__.'/js/dist/forum.js'),
-
-    (new Extend\Frontend('admin'))
-        ->js(__DIR__.'/js/dist/admin.js'),
-
+    (new Extend\Frontend('forum'))->js(__DIR__.'/js/dist/forum.js'),
+    (new Extend\Frontend('admin'))->js(__DIR__.'/js/dist/admin.js'),
     (new Extend\Locales(__DIR__.'/locale')),
 
     (new Extend\Routes('api'))
@@ -27,11 +22,9 @@ return [
         }),
 
     (new Extend\ApiSerializer(UserSerializer::class))
-        ->attribute('canSetGroupExpiration', function ($serializer, $user, $attributes) {
-            $actor = $serializer->getActor();
-            return $actor->can('hertz-dev.group-expiration.edit');
+        ->attribute('canSetGroupExpiration', function ($serializer, $user) {
+            return $serializer->getActor()->can('hertz-dev.group-expiration.edit');
         })
-        // 这一段是你之前加的 groupExpirations，保持原样即可，这里省略了为了节省篇幅...
         ->attribute('groupExpirations', function ($serializer, $user) {
              $actor = $serializer->getActor();
              if ($actor->id === $user->id || $actor->can('hertz-dev.group-expiration.edit')) {
@@ -44,7 +37,7 @@ return [
              return [];
         }),
 
-    // 👇👇👇 2. 修改监听器绑定
+    // 👇 2. 修改监听器绑定
     (new Extend\Event())
-        ->listen(Saving::class, ClearExpiration::class), // 👈 这里改成了 Saving
+        ->listen(Saving::class, ClearExpiration::class), // 👈 改为 Saving
 ];
