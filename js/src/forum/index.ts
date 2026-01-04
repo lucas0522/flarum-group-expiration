@@ -8,18 +8,15 @@ import ExpirationModal from './components/ExpirationModal';
 
 app.initializers.add('hertz-dev-group-expiration', () => {
 
-  // ============================
-  // 功能 1: 在下拉菜单添加设置按钮
-  // ============================
+  // 1. 设置按钮逻辑
   extend(UserControls, 'userControls', function(items, user) {
-    // 🛑 防御性检查 1: 如果目标用户还没加载出来，直接跳过
-    if (!user) return;
+    // 🛡️ 终极防御：如果 user 是空的，或者 user.attribute 方法丢失，直接跑路
+    if (!user || typeof user.attribute !== 'function') return;
 
-    // 🛑 防御性检查 2: 如果当前还没登录，直接跳过
     const currentUser = app.session.user;
     if (!currentUser) return;
 
-    // 正常逻辑
+    // 安全读取
     const canEdit = user.attribute('canSetGroupExpiration');
     if (!canEdit) return;
 
@@ -29,22 +26,20 @@ app.initializers.add('hertz-dev-group-expiration', () => {
     }, '设置群组过期时间'));
   });
 
-  // ============================
-  // 功能 2: 在用户卡片显示有效期
-  // ============================
+  // 2. 个人主页显示逻辑
   extend(UserCard.prototype, 'infoItems', function(items) {
     const user = this.attrs.user;
 
-    // 🛑 防御性检查 3: 核心修复点！
-    // 页面加载瞬间 user 可能是 undefined，必须拦截，否则报错
-    if (!user) return;
+    // 🛡️ 终极防御：同上，没有 user 绝不执行
+    if (!user || typeof user.attribute !== 'function') return;
 
+    // 安全读取，即使后端返回空数组也没事
     const expirations = user.attribute('groupExpirations');
-    if (!expirations) return;
 
-    const groupIds = Object.keys(expirations);
+    // 检查是否为空对象或空数组
+    if (!expirations || Object.keys(expirations).length === 0) return;
 
-    groupIds.forEach(groupId => {
+    Object.keys(expirations).forEach(groupId => {
       const group = app.store.getById('groups', groupId);
       if (group) {
         items.add(`expiration-${groupId}`, m('span.UserCard-expiration', {

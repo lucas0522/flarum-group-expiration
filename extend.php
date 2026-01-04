@@ -31,14 +31,17 @@ return [
         ->attribute('groupExpirations', function ($serializer, $user) {
             $actor = $serializer->getActor();
 
+            // 🔒 隐私检查
             if ($actor->id === $user->id || $actor->can('hertz-dev.group-expiration.edit')) {
+                // 获取数据并转为数组
                 return \Flarum\Database\AbstractModel::getConnectionResolver()->connection()
                     ->table('group_expiration')
                     ->where('user_id', $user->id)
                     ->pluck('expiration_date', 'group_id')
-                    ->toArray(); // 👈 关键修改：强制转为数组，防止前端 Store 报错
+                    ->toArray();
             }
 
-            return null;
+            // ⚠️ 关键修改：没权限时返回空数组 []，千万别返回 null
+            return [];
         }),
 ];
