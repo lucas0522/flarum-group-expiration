@@ -32,11 +32,16 @@ export default class ExpirationModal extends Modal {
             value={this.groupId()}
             onchange={e => this.groupId(e.target.value)}
           >
-            <option value="" disabled selected>请选择...</option>
+            {/* 修复1：删除了 selected 属性，只保留 disabled */}
+            <option value="" disabled>请选择...</option>
+
             {app.store.all('groups')
               .filter(g => g.id() !== '2' && g.id() !== '3')
               .map(group => (
-                <option value={group.id()}>{group.namePlural()}</option>
+                // 修复2：加上 key 属性，防止渲染混乱
+                <option key={group.id()} value={group.id()}>
+                  {group.namePlural()}
+                </option>
               ))}
           </select>
         </div>
