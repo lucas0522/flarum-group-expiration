@@ -28,6 +28,7 @@ class SaveExpirationController implements RequestHandlerInterface
         $actor = RequestUtil::getActor($request);
 
         // TODO: 这里以后要加权限检查，比如 $actor->assertAdmin();
+        $actor->assertAdmin();
 
         // 2. 获取前端发来的数据
         $data = $request->getParsedBody();
