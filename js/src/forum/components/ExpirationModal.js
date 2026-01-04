@@ -9,9 +9,14 @@ export default class ExpirationModal extends Modal {
 
     this.user = this.attrs.user;
 
+    // 获取后端传来的现有过期数据 (JSON对象: {groupId: '2025-10-01'})
+    this.existingExpirations = this.user.attribute('groupExpirations') || {};
+
     this.groupId = Stream('');
-    this.date = Stream(''); // 最终提交的日期 (YYYY-MM-DD)
-    this.days = Stream(''); // 辅助用的天数
+    this.mode = Stream('set'); // 'set' = 覆盖, 'add' = 加减
+    this.date = Stream(''); // 最终提交给后端的日期
+    this.days = Stream(''); // 输入框里的天数
+    this.currentExpiration = Stream(null); // 当前选中群组的旧过期时间
   }
 
   className() {
@@ -25,114 +30,161 @@ export default class ExpirationModal extends Modal {
   content() {
     return (
       <div className="Modal-body">
+        {/* 1. 选择群组 */}
         <div className="Form-group">
           <label>选择群组</label>
           <select
             className="FormControl"
             value={this.groupId()}
-            onchange={e => this.groupId(e.target.value)}
+            onchange={e => this.onGroupChange(e.target.value)}
           >
-            {/* 修复1：删除了 selected 属性，只保留 disabled */}
             <option value="" disabled>请选择...</option>
-
             {app.store.all('groups')
-              .filter(g => g.id() !== '2' && g.id() !== '3')
+              .filter(g => !['2', '3'].includes(g.id())) // 排除游客和普通会员
               .map(group => (
-                // 修复2：加上 key 属性，防止渲染混乱
                 <option key={group.id()} value={group.id()}>
                   {group.namePlural()}
+                  {/* 如果该群组已有过期时间，显示一个小标记 */}
+                  {this.existingExpirations[group.id()] ? ' (生效中)' : ''}
                 </option>
               ))}
           </select>
         </div>
 
-        {/* 核心改动：增加了两个输入框的联动 */}
+        {/* 显示当前状态 */}
+        {this.groupId() && (
+          <div className="Form-group">
+            <label>当前状态</label>
+            <div className="HelpText" style={{ marginTop: 0 }}>
+              {this.currentExpiration()
+                ? `📅 当前过期时间: ${this.currentExpiration()}`
+                : '⚪ 该群组目前没有设置过期时间 (永久或未加入)'}
+            </div>
+          </div>
+        )}
+
+        {/* 2. 模式选择 (只有当存在旧日期时才显示) */}
+        {this.currentExpiration() && (
+          <div className="Form-group">
+            <label>操作模式</label>
+            <div className="Select">
+              <select
+                className="FormControl"
+                value={this.mode()}
+                onchange={e => {
+                  this.mode(e.target.value);
+                  this.recalculate(); // 切换模式时重新计算
+                }}
+              >
+                <option value="set">🔄 重新设置 (覆盖旧日期)</option>
+                <option value="add">➕ / ➖ 增加或减少天数</option>
+              </select>
+            </div>
+          </div>
+        )}
+
+        {/* 3. 输入天数 */}
         <div className="Form-group">
-          <label>过期时长 (天数)</label>
+          <label>
+            {this.mode() === 'add' && this.currentExpiration() ? '增加天数 (输入负数为减少)' : '过期时长 (天数)'}
+          </label>
           <input
             type="number"
             className="FormControl"
-            placeholder="例如: 30"
+            placeholder={this.mode() === 'add' ? "例如: 30 (续费30天) 或 -5 (扣除5天)" : "例如: 30 (从今天起算)"}
             value={this.days()}
-            oninput={e => this.syncDate(e.target.value)} // 输入天数 -> 自动算日期
+            oninput={e => {
+              this.days(e.target.value);
+              this.recalculate();
+            }}
           />
         </div>
 
+        {/* 4. 结果预览 */}
         <div className="Form-group">
-          <label>过期日期 (自动计算)</label>
+          <label>结果预览 (提交后的日期)</label>
           <input
             type="date"
             className="FormControl"
+            disabled // 这个框设为只读，防止手动改乱了
             value={this.date()}
-            onchange={e => this.syncDays(e.target.value)} // 选日期 -> 自动算天数
           />
+          <div className="HelpText">
+             {this.date() ? `提交后，用户将在 ${this.date()} 过期` : '请输入天数...'}
+          </div>
         </div>
 
         <div className="Form-group">
           {Button.component({
             type: 'submit',
             className: 'Button Button--primary',
-            disabled: !this.groupId() || !this.date() // 没填完禁止提交
+            disabled: !this.groupId() || !this.date()
           }, '保存设置')}
         </div>
       </div>
     );
   }
 
-  // 输入天数，自动计算日期
-  syncDate(days) {
-    this.days(days);
-    if (!days) {
+  // 当群组改变时
+  onGroupChange(groupId) {
+    this.groupId(groupId);
+    // 从后端数据中查找该群组的过期时间
+    const oldDate = this.existingExpirations[groupId] || null;
+    this.currentExpiration(oldDate);
+
+    // 如果没有旧日期，强制切换回“设置”模式
+    if (!oldDate) {
+      this.mode('set');
+    }
+
+    // 清空输入
+    this.days('');
+    this.date('');
+  }
+
+  // 核心计算逻辑
+  recalculate() {
+    const daysInput = parseInt(this.days());
+    if (isNaN(daysInput)) {
       this.date('');
       return;
     }
 
-    const date = new Date();
-    date.setDate(date.getDate() + parseInt(days));
+    let baseDate;
 
-    // 格式化为 YYYY-MM-DD
-    const dateString = date.toISOString().split('T')[0];
-    this.date(dateString);
-  }
-
-  // 选择日期，自动反推天数
-  syncDays(dateString) {
-    this.date(dateString);
-    if (!dateString) {
-      this.days('');
-      return;
+    // 逻辑分支
+    if (this.mode() === 'add' && this.currentExpiration()) {
+      // 模式 A: 续费 (基于旧日期)
+      baseDate = new Date(this.currentExpiration());
+    } else {
+      // 模式 B: 覆盖 (基于今天)
+      baseDate = new Date();
     }
 
-    const today = new Date();
-    const targetDate = new Date(dateString);
+    // 执行加减法
+    baseDate.setDate(baseDate.getDate() + daysInput);
 
-    // 计算时间差 (毫秒 -> 天)
-    const diffTime = targetDate - today;
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-    this.days(diffDays > 0 ? diffDays : 0);
+    // 格式化输出 YYYY-MM-DD
+    const result = baseDate.toISOString().split('T')[0];
+    this.date(result);
   }
 
   onsubmit(e) {
     e.preventDefault();
-
-    // 按钮变更为加载状态
     this.loading = true;
 
-    // 发送请求
     app.request({
       method: 'POST',
       url: app.forum.attribute('apiUrl') + '/group-expiration',
       body: {
         userId: this.user.id(),
         groupId: this.groupId(),
-        expirationDate: this.date()
+        expirationDate: this.date() // 我们直接提交计算好的最终日期
       }
     }).then(() => {
-      // 成功后：
-      this.hide(); // 关闭弹窗
-      app.alerts.show({ type: 'success' }, '设置成功！用户已加入群组并设定了过期时间。');
-      window.location.reload(); // 刷新页面看效果
+      this.hide();
+      app.alerts.show({ type: 'success' }, '设置成功！');
+      window.location.reload();
     }).catch(() => {
       this.loading = false;
       m.redraw();

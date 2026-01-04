@@ -1,17 +1,15 @@
 <?php
 
 use Flarum\Extend;
-use Flarum\Api\Serializer\UserSerializer; // 👈 引入 UserSerializer
+use Flarum\Api\Serializer\UserSerializer;
 use HertzDev\GroupExpiration\Api\Controller\SaveExpirationController;
 use HertzDev\GroupExpiration\Console\ExpireGroupsCommand;
+use Flarum\Group\Event\Detaching;
+use HertzDev\GroupExpiration\Listeners\ClearExpiration;
 
 return [
-    (new Extend\Frontend('forum'))
-        ->js(__DIR__.'/js/dist/forum.js'),
-
-    (new Extend\Frontend('admin'))
-        ->js(__DIR__.'/js/dist/admin.js'),
-
+    (new Extend\Frontend('forum'))->js(__DIR__.'/js/dist/forum.js'),
+    (new Extend\Frontend('admin'))->js(__DIR__.'/js/dist/admin.js'),
     (new Extend\Locales(__DIR__.'/locale')),
 
     (new Extend\Routes('api'))
@@ -23,14 +21,28 @@ return [
             $event->daily();
         }),
 
-    // 👇👇👇 新增：在 API 输出中增加权限标记
-    // 这就是原生的精髓：后端算好权限，前端直接用
+    (new Extend\Event())
+        ->listen(Detaching::class, ClearExpiration::class),
+
     (new Extend\ApiSerializer(UserSerializer::class))
-        ->attribute('canSetGroupExpiration', function ($serializer, $user, $attributes) {
-            // 获取当前操作者（Actor）
+        // 1. 权限检查 (控制按钮显示)
+        ->attribute('canSetGroupExpiration', function ($serializer, $user) {
+            return $serializer->getActor()->can('hertz-dev.group-expiration.edit');
+        })
+        // 2. 【核心修改】返回现有的过期时间列表 (带隐私检查)
+        ->attribute('groupExpirations', function ($serializer, $user) {
             $actor = $serializer->getActor();
 
-            // 使用原生的 check 机制检查后台设置的权限
-            return $actor->can('hertz-dev.group-expiration.edit');
+            // 🔒 隐私检查：只有“用户自己”或者“有管理权限的人”才能看到过期时间
+            if ($actor->id === $user->id || $actor->can('hertz-dev.group-expiration.edit')) {
+                return \Flarum\Database\AbstractModel::getConnectionResolver()->connection()
+                    ->table('group_expiration')
+                    ->where('user_id', $user->id)
+                    ->pluck('expiration_date', 'group_id');
+                    // 返回格式: { "3": "2026-05-20" }
+            }
+
+            // 如果没权限，返回 null
+            return null;
         }),
 ];
