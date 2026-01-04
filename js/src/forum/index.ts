@@ -2,7 +2,7 @@ import app from 'flarum/forum/app';
 import { extend } from 'flarum/common/extend';
 import UserControls from 'flarum/forum/utils/UserControls';
 import Button from 'flarum/common/components/Button';
-import ExpirationModal from './components/ExpirationModal';
+import ExpirationModal from './components/ExpirationModal.js';
 
 app.initializers.add('hertz-dev-group-expiration', () => {
   extend(UserControls, 'userControls', function(items, user) {
