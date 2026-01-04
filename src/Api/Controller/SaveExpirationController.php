@@ -28,7 +28,8 @@ class SaveExpirationController implements RequestHandlerInterface
         $actor = RequestUtil::getActor($request);
 
         // TODO: 这里以后要加权限检查，比如 $actor->assertAdmin();
-        $actor->assertAdmin();
+        // 检查当前用户是否有我们刚才定义的那个权限字符串
+        $actor->assertCan('hertz-dev.group-expiration.edit');
 
         // 2. 获取前端发来的数据
         $data = $request->getParsedBody();
