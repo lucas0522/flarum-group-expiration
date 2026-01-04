@@ -2,8 +2,8 @@ import app from 'flarum/forum/app';
 import { extend } from 'flarum/common/extend';
 import UserControls from 'flarum/forum/utils/UserControls';
 import Button from 'flarum/common/components/Button';
-import UserCard from 'flarum/forum/components/UserCard'; // 👈 新增引入
-import icon from 'flarum/common/helpers/icon';         // 👈 新增引入
+import UserCard from 'flarum/forum/components/UserCard';
+import icon from 'flarum/common/helpers/icon';
 import ExpirationModal from './components/ExpirationModal';
 
 app.initializers.add('hertz-dev-group-expiration', () => {
@@ -12,17 +12,17 @@ app.initializers.add('hertz-dev-group-expiration', () => {
   // 功能 1: 在下拉菜单添加设置按钮
   // ============================
   extend(UserControls, 'userControls', function(items, user) {
-    // 1. 获取当前登录用户
+    // 🛑 防御性检查 1: 如果目标用户还没加载出来，直接跳过
+    if (!user) return;
+
+    // 🛑 防御性检查 2: 如果当前还没登录，直接跳过
     const currentUser = app.session.user;
     if (!currentUser) return;
 
-    // 2. 读取后端权限属性
+    // 正常逻辑
     const canEdit = user.attribute('canSetGroupExpiration');
-
-    // 3. 权限不足则退出
     if (!canEdit) return;
 
-    // 4. 添加按钮
     items.add('expiration', Button.component({
       icon: 'fas fa-clock',
       onclick: () => app.modal.show(ExpirationModal, { user: user }),
@@ -35,29 +35,26 @@ app.initializers.add('hertz-dev-group-expiration', () => {
   extend(UserCard.prototype, 'infoItems', function(items) {
     const user = this.attrs.user;
 
-    // 获取后端传来的过期数据
-    const expirations = user.attribute('groupExpirations');
+    // 🛑 防御性检查 3: 核心修复点！
+    // 页面加载瞬间 user 可能是 undefined，必须拦截，否则报错
+    if (!user) return;
 
-    // 如果没有数据（或者是别人在看你的主页且没权限），直接结束
+    const expirations = user.attribute('groupExpirations');
     if (!expirations) return;
 
     const groupIds = Object.keys(expirations);
 
-    // 遍历每一个有过期时间的群组
     groupIds.forEach(groupId => {
-      // 从 Flarum 本地缓存获取群组详情（为了拿群组名字）
       const group = app.store.getById('groups', groupId);
-
-      // 如果群组存在
       if (group) {
         items.add(`expiration-${groupId}`, m('span.UserCard-expiration', {
-            style: { margin: '5px 0', display: 'block' } // 稍微加点样式防止挤在一起
+            style: { margin: '5px 0', display: 'block' }
         }, [
-          icon('fas fa-hourglass-half'), // 图标
+          icon('fas fa-hourglass-half'),
           ' ',
-          group.nameSingular(), // 群组名 (例如 "VIP")
+          group.nameSingular(),
           ': ',
-          m('strong', expirations[groupId]), // 日期 (例如 "2026-05-20")
+          m('strong', expirations[groupId]),
           ' 到期'
         ]));
       }
