@@ -1,11 +1,12 @@
 <?php
 
 use Flarum\Extend;
-use Flarum\Api\Serializer\UserSerializer; // 👈 引入 UserSerializer
+use Flarum\Api\Serializer\UserSerializer;
 use HertzDev\GroupExpiration\Api\Controller\SaveExpirationController;
 use HertzDev\GroupExpiration\Console\ExpireGroupsCommand;
-use Flarum\Group\Event\Detaching;
+use Flarum\User\Event\Saving; // 👈 1. 引入正确的 Saving 事件
 use HertzDev\GroupExpiration\Listeners\ClearExpiration;
+// 注意：删掉了 use Flarum\Group\Event\Detaching;
 
 return [
     (new Extend\Frontend('forum'))
@@ -25,16 +26,25 @@ return [
             $event->daily();
         }),
 
-    // 👇👇👇 新增：在 API 输出中增加权限标记
-    // 这就是原生的精髓：后端算好权限，前端直接用
     (new Extend\ApiSerializer(UserSerializer::class))
         ->attribute('canSetGroupExpiration', function ($serializer, $user, $attributes) {
-            // 获取当前操作者（Actor）
             $actor = $serializer->getActor();
-
-            // 使用原生的 check 机制检查后台设置的权限
             return $actor->can('hertz-dev.group-expiration.edit');
+        })
+        // 这一段是你之前加的 groupExpirations，保持原样即可，这里省略了为了节省篇幅...
+        ->attribute('groupExpirations', function ($serializer, $user) {
+             $actor = $serializer->getActor();
+             if ($actor->id === $user->id || $actor->can('hertz-dev.group-expiration.edit')) {
+                 return \Flarum\Database\AbstractModel::getConnectionResolver()->connection()
+                     ->table('group_expiration')
+                     ->where('user_id', $user->id)
+                     ->pluck('expiration_date', 'group_id')
+                     ->toArray();
+             }
+             return [];
         }),
+
+    // 👇👇👇 2. 修改监听器绑定
     (new Extend\Event())
-        ->listen(Detaching::class, ClearExpiration::class),
+        ->listen(Saving::class, ClearExpiration::class), // 👈 这里改成了 Saving
 ];
