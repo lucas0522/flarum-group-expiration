@@ -1,15 +1,19 @@
 <?php
 
 use Flarum\Extend;
-use Flarum\Api\Serializer\UserSerializer;
+use Flarum\Api\Serializer\UserSerializer; // 👈 引入 UserSerializer
 use HertzDev\GroupExpiration\Api\Controller\SaveExpirationController;
 use HertzDev\GroupExpiration\Console\ExpireGroupsCommand;
 use Flarum\Group\Event\Detaching;
 use HertzDev\GroupExpiration\Listeners\ClearExpiration;
 
 return [
-    (new Extend\Frontend('forum'))->js(__DIR__.'/js/dist/forum.js'),
-    (new Extend\Frontend('admin'))->js(__DIR__.'/js/dist/admin.js'),
+    (new Extend\Frontend('forum'))
+        ->js(__DIR__.'/js/dist/forum.js'),
+
+    (new Extend\Frontend('admin'))
+        ->js(__DIR__.'/js/dist/admin.js'),
+
     (new Extend\Locales(__DIR__.'/locale')),
 
     (new Extend\Routes('api'))
@@ -21,27 +25,16 @@ return [
             $event->daily();
         }),
 
-    (new Extend\Event())
-        ->listen(Detaching::class, ClearExpiration::class),
-
+    // 👇👇👇 新增：在 API 输出中增加权限标记
+    // 这就是原生的精髓：后端算好权限，前端直接用
     (new Extend\ApiSerializer(UserSerializer::class))
-        ->attribute('canSetGroupExpiration', function ($serializer, $user) {
-            return $serializer->getActor()->can('hertz-dev.group-expiration.edit');
-        })
-        ->attribute('groupExpirations', function ($serializer, $user) {
+        ->attribute('canSetGroupExpiration', function ($serializer, $user, $attributes) {
+            // 获取当前操作者（Actor）
             $actor = $serializer->getActor();
 
-            // 🔒 隐私检查
-            if ($actor->id === $user->id || $actor->can('hertz-dev.group-expiration.edit')) {
-                // 获取数据并转为数组
-                return \Flarum\Database\AbstractModel::getConnectionResolver()->connection()
-                    ->table('group_expiration')
-                    ->where('user_id', $user->id)
-                    ->pluck('expiration_date', 'group_id')
-                    ->toArray();
-            }
-
-            // ⚠️ 关键修改：没权限时返回空数组 []，千万别返回 null
-            return [];
+            // 使用原生的 check 机制检查后台设置的权限
+            return $actor->can('hertz-dev.group-expiration.edit');
         }),
+    (new Extend\Event())
+        ->listen(Detaching::class, ClearExpiration::class),
 ];
