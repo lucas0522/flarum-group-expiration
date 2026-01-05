@@ -27,12 +27,18 @@ return [
         })
         ->attribute('groupExpirations', function ($serializer, $user) {
              $actor = $serializer->getActor();
+             // 权限检查：只有自己或管理员能看到过期时间
              if ($actor->id === $user->id || $actor->can('hertz-dev.group-expiration.edit')) {
-                 return \Flarum\Database\AbstractModel::getConnectionResolver()->connection()
-                     ->table('group_expiration')
-                     ->where('user_id', $user->id)
-                     ->pluck('expiration_date', 'group_id')
-                     ->toArray();
+                 try {
+                     return \Flarum\Database\AbstractModel::getConnectionResolver()->connection()
+                         ->table('group_expiration')
+                         ->where('user_id', $user->id)
+                         ->pluck('expiration_date', 'group_id')
+                         ->toArray();
+                 } catch (\Exception $e) {
+                     // 防止数据库报错导致整个 User 接口崩溃
+                     return [];
+                 }
              }
              return [];
         }),

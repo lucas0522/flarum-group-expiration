@@ -2,19 +2,21 @@
 
 namespace HertzDev\GroupExpiration\Api\Controller;
 
+use Flarum\Api\Controller\AbstractCreateController; // 👈 改用这个控制器基类
+use Flarum\Api\Serializer\UserSerializer;         // 👈 引入 User 序列化器
 use Flarum\Http\RequestUtil;
 use Flarum\User\User;
-use Flarum\Group\Group;
 use Illuminate\Support\Arr;
-use Laminas\Diactoros\Response\EmptyResponse;
-use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
-use Psr\Http\Server\RequestHandlerInterface;
+use Tobscure\JsonApi\Document;                    // 👈 引入 Document
 use Illuminate\Database\ConnectionInterface;
 use Flarum\Foundation\ValidationException;
 
-class SaveExpirationController implements RequestHandlerInterface
+class SaveExpirationController extends AbstractCreateController
 {
+    // 1. 指定返回的数据类型是 User，这样前端 Store 就能自动更新
+    public $serializer = UserSerializer::class;
+
     protected $db;
 
     public function __construct(ConnectionInterface $db)
@@ -22,45 +24,48 @@ class SaveExpirationController implements RequestHandlerInterface
         $this->db = $db;
     }
 
-    public function handle(ServerRequestInterface $request): ResponseInterface
+    // 2. 将 handle 改为 data，这是 AbstractCreateController 的标准写法
+    protected function data(ServerRequestInterface $request, Document $document)
     {
-        // 1. 获取当前操作者（比如管理员）
+        // 获取当前操作者
         $actor = RequestUtil::getActor($request);
 
-        // TODO: 这里以后要加权限检查，比如 $actor->assertAdmin();
-        // 检查当前用户是否有我们刚才定义的那个权限字符串
+        // 权限检查
         $actor->assertCan('hertz-dev.group-expiration.edit');
 
-        // 2. 获取前端发来的数据
+        // 获取数据
         $data = $request->getParsedBody();
         $userId = Arr::get($data, 'userId');
         $groupId = Arr::get($data, 'groupId');
         $date = Arr::get($data, 'expirationDate');
 
-        // 3. 简单的验证
+        // 验证
         if (!$userId || !$groupId || !$date) {
             throw new ValidationException(['error' => '缺少必要参数']);
         }
 
-        // 4. 写入数据库 (使用 updateOrInsert，如果存在就更新，不存在就插入)
-        $this->db->table('group_expirations')->updateOrInsert(
+        // 3. 修正表名：去掉 's'，与 extend.php 保持一致
+        // 使用 group_expiration 而不是 group_expirations
+        $this->db->table('group_expiration')->updateOrInsert(
             [
                 'user_id' => $userId,
                 'group_id' => $groupId
             ],
             [
                 'expiration_date' => $date,
-                'created_at' => \Carbon\Carbon::now(),
+                // created_at 在 updateOrInsert 中比较棘手，这里简化处理，只更新 updated_at 即可
+                // 如果需要严格的 created_at，逻辑会复杂一些，通常对于这种关联表，记录最后更新时间够用了
                 'updated_at' => \Carbon\Carbon::now()
             ]
         );
 
-        // 5. 同时把用户真正加入那个群组 (Flarum 核心逻辑)
-        $user = User::find($userId);
-        if ($user) {
-            $user->groups()->syncWithoutDetaching([$groupId]);
-        }
+        // 4. 同步群组逻辑
+        $user = User::findOrFail($userId);
+        $user->groups()->syncWithoutDetaching([$groupId]);
 
-        return new EmptyResponse();
+        // 5. 【关键】返回 User 对象
+        // 这样前端收到响应后，会自动根据 UserSerializer 更新 app.store 中的用户数据
+        // 从而不需要刷新页面，用户卡片上的过期时间就能直接显示出来
+        return $user;
     }
 }
