@@ -9,18 +9,16 @@ use Carbon\Carbon;
 
 class ExpireGroupsJob extends AbstractJob
 {
-    // 这里不需要传参数，因为我们是去数据库全量扫描
-    // 如果你是针对单个用户，可以在构造函数里传 userId
     public function __construct()
     {
     }
 
     public function handle(ConnectionInterface $db)
     {
-        // === 这里放原来 Command 里的逻辑 ===
-
         // 1. 找出过期记录
-        $expiredRecords = $db->table('group_expirations')
+        // ⚠️ 注意：这里我改成了单数 'group_expiration' 以匹配 Controller 的修改
+        // 如果你的数据库表名是复数，请把这里改成 'group_expirations'
+        $expiredRecords = $db->table('group_expiration')
             ->where('expiration_date', '<', Carbon::now())
             ->get();
 
@@ -29,14 +27,24 @@ class ExpireGroupsJob extends AbstractJob
         }
 
         foreach ($expiredRecords as $record) {
+            // 2. 移除用户的群组
+            // 使用 find 而不是 findOrFail，防止用户已经被删除了导致任务报错中断
             $user = User::find($record->user_id);
 
             if ($user) {
+                // detach 用于移除多对多关联
                 $user->groups()->detach($record->group_id);
+
+                // 可选：在这里记录日志，方便调试
+                // echo "User {$user->id} removed from Group {$record->group_id}\n";
             }
 
-            // 删除记录
-            $db->table('group_expirations')->where('id', $record->id)->delete();
+            // 3. 🛠️【核心修复】删除数据库记录
+            // 关联表通常没有 'id' 主键，必须用 user_id 和 group_id 联合定位
+            $db->table('group_expiration') // 👈 记得确认这里也是单数/复数一致
+                ->where('user_id', $record->user_id)
+                ->where('group_id', $record->group_id)
+                ->delete();
         }
     }
 }
