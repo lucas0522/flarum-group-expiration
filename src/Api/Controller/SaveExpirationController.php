@@ -43,7 +43,7 @@ class SaveExpirationController implements RequestHandlerInterface
         }
 
         // 4. 写入数据库 (使用 updateOrInsert，如果存在就更新，不存在就插入)
-        $this->db->table('group_expirations')->updateOrInsert(
+        $this->db->table('group_expiration')->updateOrInsert(
             [
                 'user_id' => $userId,
                 'group_id' => $groupId

@@ -4,7 +4,7 @@ use Illuminate\Database\Schema\Blueprint;
 use Flarum\Database\Migration;
 
 return Migration::createTable(
-    'group_expirations',
+    'group_expiration',
     function (Blueprint $table) {
         $table->increments('id');
         $table->integer('user_id')->unsigned();

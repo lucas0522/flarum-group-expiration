@@ -20,7 +20,7 @@ class ExpireGroupsJob extends AbstractJob
         // === 这里放原来 Command 里的逻辑 ===
 
         // 1. 找出过期记录
-        $expiredRecords = $db->table('group_expirations')
+        $expiredRecords = $db->table('group_expiration')
             ->where('expiration_date', '<', Carbon::now())
             ->get();
 
@@ -36,7 +36,7 @@ class ExpireGroupsJob extends AbstractJob
             }
 
             // 删除记录
-            $db->table('group_expirations')->where('id', $record->id)->delete();
+            $db->table('group_expiration')->where('id', $record->id)->delete();
         }
     }
 }
