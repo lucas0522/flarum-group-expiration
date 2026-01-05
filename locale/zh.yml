@@ -1,0 +1,16 @@
+hertz-dev-group-expiration:
+  # 前端论坛界面的翻译
+  forum:
+    user_controls:
+      edit_button: "设置群组过期时间"
+    user_card:
+      # {date} 是我们之前在 JS 里传进来的参数
+      expiration_label: "群组到期：{date}"
+
+  # 后台管理界面的翻译
+  admin:
+    permissions:
+      # 对应之前 extend.php 里写的编辑权限
+      edit_date: "编辑用户群组到期时间"
+      # 对应之前 Listener 里写的查看权限
+      view_date: "查看用户群组到期时间"

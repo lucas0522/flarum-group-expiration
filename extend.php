@@ -1,9 +1,10 @@
 <?php
 
 use Flarum\Extend;
-use Flarum\Api\Serializer\UserSerializer; // 👈 引入 UserSerializer
+use Flarum\Api\Serializer\UserSerializer;
 use HertzDev\GroupExpiration\Api\Controller\SaveExpirationController;
 use HertzDev\GroupExpiration\Console\ExpireGroupsCommand;
+use HertzDev\GroupExpiration\Listener\AddUserAttributes; // 👈 1. 引入新创建的 Listener
 
 return [
     (new Extend\Frontend('forum'))
@@ -17,22 +18,21 @@ return [
     (new Extend\Routes('api'))
         ->post('/group-expiration', 'hertz-dev.group-expiration.save', SaveExpirationController::class),
 
-
     (new Extend\Console())
         ->command(ExpireGroupsCommand::class)
         ->schedule('group-expiration:expire', function ($event) {
-
             $event->daily();
         }),
 
-    // 👇👇👇 新增：在 API 输出中增加权限标记
-    // 这就是原生的精髓：后端算好权限，前端直接用
     (new Extend\ApiSerializer(UserSerializer::class))
-        ->attribute('canSetGroupExpiration', function ($serializer, $user, $attributes) {
-            // 获取当前操作者（Actor）
-            $actor = $serializer->getActor();
+        // 👇 2. 注册刚才写的 AddUserAttributes 类
+        // 这会让 groupExpiration 字段出现在 API 返回结果中
+        ->attributes(AddUserAttributes::class)
 
-            // 使用原生的 check 机制检查后台设置的权限
+        // 👇 这是你原有的代码，保留不动
+        // 用于告诉前端“当前用户是否有权修改过期时间”
+        ->attribute('canSetGroupExpiration', function ($serializer, $user, $attributes) {
+            $actor = $serializer->getActor();
             return $actor->can('hertz-dev.group-expiration.edit');
         }),
 ];
