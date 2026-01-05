@@ -1,15 +1,17 @@
 <?php
 
 use Flarum\Extend;
-use Flarum\Api\Serializer\UserSerializer;
+use Flarum\Api\Serializer\UserSerializer; // 👈 引入 UserSerializer
 use HertzDev\GroupExpiration\Api\Controller\SaveExpirationController;
 use HertzDev\GroupExpiration\Console\ExpireGroupsCommand;
-use Flarum\User\Event\Saving; // 👈 1. 引入 Saving
-use HertzDev\GroupExpiration\Listeners\ClearExpiration;
 
 return [
-    (new Extend\Frontend('forum'))->js(__DIR__.'/js/dist/forum.js'),
-    (new Extend\Frontend('admin'))->js(__DIR__.'/js/dist/admin.js'),
+    (new Extend\Frontend('forum'))
+        ->js(__DIR__.'/js/dist/forum.js'),
+
+    (new Extend\Frontend('admin'))
+        ->js(__DIR__.'/js/dist/admin.js'),
+
     (new Extend\Locales(__DIR__.'/locale')),
 
     (new Extend\Routes('api'))
@@ -21,29 +23,14 @@ return [
             $event->daily();
         }),
 
+    // 👇👇👇 新增：在 API 输出中增加权限标记
+    // 这就是原生的精髓：后端算好权限，前端直接用
     (new Extend\ApiSerializer(UserSerializer::class))
-        ->attribute('canSetGroupExpiration', function ($serializer, $user) {
-            return $serializer->getActor()->can('hertz-dev.group-expiration.edit');
-        })
-        ->attribute('groupExpirations', function ($serializer, $user) {
-             $actor = $serializer->getActor();
-             // 权限检查：只有自己或管理员能看到过期时间
-             if ($actor->id === $user->id || $actor->can('hertz-dev.group-expiration.edit')) {
-                 try {
-                     return \Flarum\Database\AbstractModel::getConnectionResolver()->connection()
-                         ->table('group_expiration')
-                         ->where('user_id', $user->id)
-                         ->pluck('expiration_date', 'group_id')
-                         ->toArray();
-                 } catch (\Exception $e) {
-                     // 防止数据库报错导致整个 User 接口崩溃
-                     return [];
-                 }
-             }
-             return [];
-        }),
+        ->attribute('canSetGroupExpiration', function ($serializer, $user, $attributes) {
+            // 获取当前操作者（Actor）
+            $actor = $serializer->getActor();
 
-    // 👇 2. 修改监听器绑定
-    (new Extend\Event())
-        ->listen(Saving::class, ClearExpiration::class), // 👈 改为 Saving
+            // 使用原生的 check 机制检查后台设置的权限
+            return $actor->can('hertz-dev.group-expiration.edit');
+        }),
 ];
