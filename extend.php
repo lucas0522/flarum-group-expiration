@@ -21,7 +21,7 @@ return [
     (new Extend\Console())
         ->command(ExpireGroupsCommand::class)
         ->schedule('group-expiration:expire', function ($event) {
-            $event->daily();
+            $event->hourly();
         }),
 
     (new Extend\ApiSerializer(UserSerializer::class))
