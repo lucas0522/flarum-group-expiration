@@ -2,7 +2,7 @@ import app from 'flarum/admin/app';
 
 app.initializers.add('hertz-dev-group-expiration', () => {
   app.extensionData
-    .for('hertz-dev-flarum-group-expiration')
+    .for('hertz-dev-group-expiration')
 
     // 1. 注册编辑权限 (对应 zh.yml 中的 edit_date)
     .registerPermission({
