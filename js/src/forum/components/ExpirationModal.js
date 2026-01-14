@@ -19,7 +19,7 @@ export default class ExpirationModal extends Modal {
   }
 
   title() {
-    return '设置群组过期时间';
+    return '加权';
   }
 
   content() {
