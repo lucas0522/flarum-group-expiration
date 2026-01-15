@@ -6,6 +6,12 @@ hertz-dev-group-expiration:
     user_card:
       # {date} 是我们之前在 JS 里传进来的参数
       expiration_label: "到期时间：{date}"
+    modal:
+      title: "延长群组有效期"
+      current_label: "当前有效期"
+      new_label: "预计新有效期"
+      days_label: "增加时长 (天数)"
+      submit_button: "确认保存"
 
   # 后台管理界面的翻译
   admin:
